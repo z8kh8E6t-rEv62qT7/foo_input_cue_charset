@@ -1,0 +1,8 @@
+* text=auto
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+tests/fixtures/*.cue -text
+tests/fixtures/SHA256SUMS text eol=lf
+

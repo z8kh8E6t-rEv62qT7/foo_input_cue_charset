@@ -1,0 +1,9 @@
+REM GENRE "测试"
+PERFORMER "示例艺术家"
+TITLE "自动字符集识别"
+FILE "测试音频.flac" WAVE
+  TRACK 01 AUDIO
+    TITLE "第一轨"
+    PERFORMER "示例艺术家"
+    INDEX 01 00:00:00
+
