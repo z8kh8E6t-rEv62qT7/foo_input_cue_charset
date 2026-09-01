@@ -1,5 +1,6 @@
 #include "cue_charset/cue_charset.hpp"
 #include "cue_reference_path.hpp"
+#include "flac_duration_repair_tests.hpp"
 #include "track_layout.hpp"
 #include "riff_info_tests.hpp"
 
@@ -298,7 +299,7 @@ void test_cue_reference_classification() {
             CueReferenceKind::relative,
         "slash-separated relative CUE reference was not accepted");
     require(
-        classify_cue_reference("I:\\CD\\KEY\\Air\\KEY - 04.夏影.wav") ==
+        classify_cue_reference("X:\\Fixtures\\Album\\Track - 04.测试.wav") ==
             CueReferenceKind::drive_absolute,
         "drive-absolute CUE reference was not recognized");
     require(
@@ -348,6 +349,7 @@ int main(const int argc, char* argv[]) {
         test_corrupt_gb18030(analyzer, fixtures);
         test_unicode_signature(analyzer);
         test_statistical_candidates(analyzer, fixtures);
+        cue_charset::tests::run_flac_duration_repair_tests();
         cue_charset::tests::run_riff_info_tests(analyzer);
         test_track_layout();
         test_cue_reference_classification();

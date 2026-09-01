@@ -1,6 +1,6 @@
 # foo_input_cue_charset
 
-`foo_input_cue_charset` 是一个只读的 foobar2000 播放列表加载器和输入组件，用于处理字符编码预先未知的外部 CUE 文件。0.3.4 版本还提供可选的只读输入信息过滤器，可对直接加入 foobar2000 的 WAVE 文件应用相同的 UTF-8 RIFF INFO 修复。项目同时保留可复用的 ICU 字符集核心库及其诊断 CLI。
+`foo_input_cue_charset` 是一个只读的 foobar2000 播放列表加载器和输入组件，用于处理字符编码预先未知的外部 CUE 文件。0.3.5 版本还提供两个相互独立、默认关闭的只读输入信息过滤器：一个修复 WAVE 的 UTF-8 RIFF INFO，另一个修复少数 STREAMINFO 时长损坏的 FLAC 在 foobar2000 缓存中的时长和平均码率。项目同时保留可复用的 ICU 字符集核心库及其诊断 CLI。
 
 组件会把 `.cue` 文件作为播放列表加载。每条 CUE 轨道均表示为标准的 foobar2000 多轨位置：规范化的本地 CUE 路径，加上原始 CUE `TRACK` 编号作为 subsong。`CUE Charset Input` 通过标准多轨输入 API 接管 `.cue`，直接提供元数据和音频解码，不生成代理文件，也不使用自定义 URL scheme 或文件系统服务。
 
@@ -27,6 +27,10 @@
 - 显式 CUE 元数据最后应用，因此优先级高于 RIFF INFO 修复结果。
 - 可容忍 RIFF 声明边界不匹配，以及最后一个 `data` 块声明长度超过实际可用字节。若结构化遍历无法恢复 INFO，只扫描文件开头和结尾各 4 MiB，寻找完整且按 word 对齐的 `LIST/INFO` 候选。候选边界、字段大小限制、NUL 处理和 UTF-8 校验仍保持严格；不会扫描完整音频 payload。
 - 在 foobar2000 标准 **Input info filters** 设置页启用 `CUE Charset RIFF INFO Filter` 后，会对直接加入的本地 `.wav` 和 `.wave` 条目应用相同修复。该过滤器不会接管或包装 WAVE decoder，不会改变解码音频，也不会拦截远程 URL 或非零 subsong。
+- 在同一设置页启用 `CUE Charset FLAC Duration Repair` 后，会对直接加入的本地 `.flac` 和 CUE 引用的本地 FLAC 检查异常时长。该过滤器仅处理 subsong 0；远程地址和其他格式保持原样。
+- FLAC 时长过滤器只在原生信息同时满足“声明时长大于 600 秒”和“按文件大小及声明时长计算的平均码率低于 96 kbps”时完整解码。扫描使用 foobar2000 原生 decoder 的简单解码和禁用 postprocessor flags，不启用 integrity testing，因此损坏的 STREAMINFO MD5 不会把正常可播放文件误判为扫描失败。
+- 解码采样数与声明时长相差超过 1 秒时，过滤器只覆盖当前 `file_info` 的时长并重新计算平均 `BITRATE`。成功修正输出一条 warning，包含路径、声明时长、实际时长和修正码率；采样率变化、空输出、溢出、无效文件统计或解码失败则保留原生信息并输出 warning。用户取消操作会原样传播且不记为错误。
+- 已修正结果按规范路径、文件大小和修改时间保存在进程内缓存中。文件统计变化会自动失效；直接 FLAC 和 CUE 引用共享同一结果，同一文件不会重复完整解码。缓存不写入磁盘，失败结果不缓存。
 - 以下情况保持原生元数据不变：仅含 ASCII 的 INFO、无效或混合编码、无法恢复的损坏块、不可 seek 的流、RF64、RIFX、WAVE64、未知 INFO 字段，以及非 WAVE 引用音频。
 - RIFF INFO 修复失败不会阻止加载或播放。无效修复候选和可恢复读取错误会在每次受影响操作中记录一次 warning；成功修复保持静默。
 - 不解析或重新解释 AIFF 文本块、ID3v1/ID3v2、APEv2、FLAC/Vorbis Comment、MP4、TAK 或 TTA 元数据；这些格式继续使用其原生 foobar2000 decoder 返回的元数据。
@@ -52,7 +56,9 @@
 
 此前出现过一次没有附加信息的 `Unrecoverable playback error`，原因是 foobar2000 未选择可用输出设备，并非 playlist loader 或 decoder 预检失败。组件不需要 redirect handler、虚拟文件系统、代理文件或隐式 hook。
 
-组件没有自定义设置页，也不会修改 CUE、引用音频、标签、播放列表或媒体库设置。直接 WAVE 修复采用标准 foobar2000 input-info filter，因此新安装后默认不启用；需要用户在 **Input info filters** 页面手动启用 `CUE Charset RIFF INFO Filter`。
+组件没有自定义设置页，也不会修改 CUE、引用音频、标签、播放列表或媒体库设置。两个修复均采用标准 foobar2000 input-info filter，因此新安装后默认不启用；需要用户在 **Input info filters** 页面分别手动启用 `CUE Charset RIFF INFO Filter` 或 `CUE Charset FLAC Duration Repair`。
+
+启用 FLAC 过滤器后，foobar2000 已缓存的旧时长不会自动刷新。请对相关条目执行 **Reload info from file(s)**。修复只存在于 foobar2000 的信息缓存：FLAC 内部错误的 `total_samples` 和 MD5 不会改变，`flac -t` 仍会报告原始 MD5 mismatch。
 
 ## 环境要求
 
@@ -88,7 +94,7 @@ ctest --test-dir D:/Foobar2000/foo_input_cue_charset/build --output-on-failure
 项目不提供 CMake Preset 或 wrapper build script。构建过程会使用 v143 调用官方 `pfc`、SDK、component-client 和 helpers MSBuild 工程，然后生成：
 
 ```text
-build/dist/foo_input_cue_charset-0.3.4-x64.fb2k-component
+build/dist/foo_input_cue_charset-0.3.5-x64.fb2k-component
 build/dist/SHA256SUMS
 ```
 
@@ -120,3 +126,5 @@ first_replacement_offset=N/A
 `tests/fixtures` 包含真实的 GB18030 CUE、故意损坏的 GB18030 fixture、一个被 ICU 错误地将 Big5 排在 GB18030 之前的样本、规范 UTF-8 文本和 SHA-256 清单。损坏 fixture 使用显式指定的 GB18030 converter 进行转换，避免统计检测对损坏数据的不同判断造成测试不稳定。
 
 核心测试还会合成以下 RIFF/WAVE INFO 情形：结构正常、`data` 截断、受限的文件头/文件尾恢复、块结构损坏；同时覆盖具有代表性的 RF64、RIFX、WAVE64、AIFF、FLAC、APE/APEv2、WavPack、ID3、MP4、TAK 和 TTA signature。这些回归测试确保 UTF-8 overlay 始终只作用于经典小端 RIFF/WAVE，而不会演变成通用标签 decoder。
+
+FLAC 时长核心测试覆盖 600 秒和 96 kbps 的严格边界、无效数值、无需扫描和需要扫描的策略、1 秒修正阈值、采样数溢出、采样率变化、空输出，以及缓存命中和文件统计变化失效。已知损坏样本的回归数据为 6,206,976 samples / 44,100 Hz，即约 140.748 秒和 543.8 kbps。

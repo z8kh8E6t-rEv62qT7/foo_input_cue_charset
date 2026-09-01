@@ -2,6 +2,7 @@ add_library(fake_icu SHARED fake_icu.cpp)
 set_target_properties(fake_icu PROPERTIES PREFIX "")
 
 add_executable(cue_charset_tests
+    flac_duration_repair_tests.cpp
     riff_info_tests.cpp
     test_main.cpp)
 target_link_libraries(cue_charset_tests PRIVATE cue_charset::cue_charset)

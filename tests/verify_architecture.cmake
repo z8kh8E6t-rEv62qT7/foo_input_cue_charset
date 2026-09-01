@@ -149,6 +149,77 @@ foreach(required_filter_token IN ITEMS
     endif()
 endforeach()
 
+file(READ "${PROJECT_SOURCE_DIR}/src/foobar/flac_duration_filter.cpp"
+    flac_filter_source)
+foreach(required_flac_filter_token IN ITEMS
+        "class FlacDurationRepairFilter : public input_info_filter"
+        "service_factory_single_t<FlacDurationRepairFilter>"
+        "CUE Charset FLAC Duration Repair"
+        "foobar2000_io::extract_native_path"
+        "pfc::stricmp_ascii(extension.c_str(), \"flac\")"
+        "location.get_subsong_index() != 0"
+        "stats2_size | stats2_timestamp"
+        "should_probe_flac_duration"
+        "input_entry::g_open_for_decoding"
+        "input_flag_simpledecode | input_flag_no_postproc"
+        "info.set_length"
+        "info.info_calculate_bitrate"
+        "return preferences_page::guid_input_info_filter")
+    string(FIND "${flac_filter_source}" "${required_flac_filter_token}"
+        flac_filter_at)
+    if(flac_filter_at EQUAL -1)
+        message(FATAL_ERROR
+            "FLAC duration filter requirement is missing: ${required_flac_filter_token}")
+    endif()
+endforeach()
+string(FIND "${flac_filter_source}" "input_flag_testing_integrity"
+    integrity_flag_at)
+if(NOT integrity_flag_at EQUAL -1)
+    message(FATAL_ERROR
+        "FLAC duration scan must not enable integrity testing")
+endif()
+
+file(READ "${PROJECT_SOURCE_DIR}/src/foobar/flac_duration_filter.hpp"
+    flac_filter_header)
+foreach(required_guid_part IN ITEMS
+        "0xbf677613" "0x469b" "0x42d2"
+        "0x97, 0x85, 0x37, 0xc2, 0x01, 0xf4, 0x14, 0x02")
+    string(FIND "${flac_filter_header}" "${required_guid_part}" guid_at)
+    if(guid_at EQUAL -1)
+        message(FATAL_ERROR
+            "FLAC duration filter GUID is incomplete: ${required_guid_part}")
+    endif()
+endforeach()
+
+file(READ "${PROJECT_SOURCE_DIR}/src/flac_duration_repair.cpp"
+    flac_repair_source)
+foreach(required_flac_core_token IN ITEMS
+        "flac_suspicious_duration_seconds"
+        "flac_suspicious_bitrate_kbps"
+        "flac_minimum_correction_delta_seconds"
+        "sample_count_overflow"
+        "sample_rate_changed"
+        "entries_.insert_or_assign")
+    string(FIND "${flac_repair_source}" "${required_flac_core_token}"
+        flac_core_at)
+    if(flac_core_at EQUAL -1)
+        message(FATAL_ERROR
+            "FLAC duration core requirement is missing: ${required_flac_core_token}")
+    endif()
+endforeach()
+
+string(FIND "${document_source}" "input_helper::g_get_info" cue_native_info_at)
+if(cue_native_info_at EQUAL -1)
+    message(FATAL_ERROR
+        "CUE referenced FLAC must pass through the shared input-info filter path")
+endif()
+
+file(READ "${PROJECT_SOURCE_DIR}/src/foobar/component.cpp" component_source)
+string(FIND "${component_source}" "\"0.3.5\"" version_at)
+if(version_at EQUAL -1)
+    message(FATAL_ERROR "Component version must be 0.3.5")
+endif()
+
 file(READ "${PROJECT_SOURCE_DIR}/src/foobar/cue_document.cpp" document_source)
 string(FIND "${document_source}"
     "const ScopedWaveInfoFilterBypass filter_bypass" filter_bypass_at)

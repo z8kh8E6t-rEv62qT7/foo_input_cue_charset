@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(foo_input_cue_charset VERSION 0.3.4 LANGUAGES CXX)
+project(foo_input_cue_charset VERSION 0.3.5 LANGUAGES CXX)
 
 include(CTest)
 
@@ -35,6 +35,7 @@ add_library(cue_charset STATIC
     src/analyzer.cpp
     src/cue_reference_path.cpp
     src/diagnostics.cpp
+    src/flac_duration_repair.cpp
     src/icu_runtime.cpp
     src/riff_info.cpp
     src/track_layout.cpp
@@ -213,6 +214,7 @@ if(BUILD_FOOBAR2000_COMPONENT)
         src/foobar/cue_document.cpp
         src/foobar/cue_input.cpp
         src/foobar/cue_playlist_loader.cpp
+        src/foobar/flac_duration_filter.cpp
         src/foobar/riff_info_repair.cpp
         src/foobar/wave_info_filter.cpp)
     add_dependencies(foo_input_cue_charset foobar2000_sdk_build)
