@@ -19,6 +19,8 @@ public:
     explicit IcuRuntime(const std::filesystem::path& root);
 
     [[nodiscard]] DetectionResult detect(std::span<const std::byte> input) const;
+    [[nodiscard]] std::optional<DetectionResult> detect_unicode_signature(
+        std::span<const std::byte> input) const;
     [[nodiscard]] std::vector<DetectionResult> detect_candidates(
         std::span<const std::byte> input) const;
     [[nodiscard]] ConversionResult convert(

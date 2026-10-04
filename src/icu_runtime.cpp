@@ -24,7 +24,7 @@ const char* byte_data(const std::span<const std::byte> input) {
 
 int32_t checked_length(const std::span<const std::byte> input) {
     if (input.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max())) {
-        throw Error("input is too large for the ICU 77 C API");
+        throw Error("input is too large for the ICU 78 C API");
     }
     return static_cast<int32_t>(input.size());
 }
@@ -102,32 +102,32 @@ void U_CALLCONV replacement_callback(
 
 IcuRuntime::IcuRuntime(const std::filesystem::path& root)
     : libcxx_(root / "bin" / "libc++.dll"),
-      data_(root / "bin" / "libicudt77.dll"),
-      common_(root / "bin" / "libicuuc77.dll"),
-      i18n_(root / "bin" / "libicuin77.dll") {
-    detect_signature_ = load_function<DetectSignatureFn>(common_, "ucnv_detectUnicodeSignature_77");
-    detector_open_ = load_function<DetectorOpenFn>(i18n_, "ucsdet_open_77");
-    detector_close_ = load_function<DetectorCloseFn>(i18n_, "ucsdet_close_77");
-    detector_set_text_ = load_function<DetectorSetTextFn>(i18n_, "ucsdet_setText_77");
+      data_(root / "bin" / "libicudt78.dll"),
+      common_(root / "bin" / "libicuuc78.dll"),
+      i18n_(root / "bin" / "libicuin78.dll") {
+    detect_signature_ = load_function<DetectSignatureFn>(common_, "ucnv_detectUnicodeSignature_78");
+    detector_open_ = load_function<DetectorOpenFn>(i18n_, "ucsdet_open_78");
+    detector_close_ = load_function<DetectorCloseFn>(i18n_, "ucsdet_close_78");
+    detector_set_text_ = load_function<DetectorSetTextFn>(i18n_, "ucsdet_setText_78");
     detector_detect_all_ =
-        load_function<DetectorDetectAllFn>(i18n_, "ucsdet_detectAll_77");
-    detector_get_name_ = load_function<DetectorGetNameFn>(i18n_, "ucsdet_getName_77");
+        load_function<DetectorDetectAllFn>(i18n_, "ucsdet_detectAll_78");
+    detector_get_name_ = load_function<DetectorGetNameFn>(i18n_, "ucsdet_getName_78");
     detector_get_confidence_ =
-        load_function<DetectorGetConfidenceFn>(i18n_, "ucsdet_getConfidence_77");
-    converter_open_ = load_function<ConverterOpenFn>(common_, "ucnv_open_77");
-    converter_close_ = load_function<ConverterCloseFn>(common_, "ucnv_close_77");
-    set_to_callback_ = load_function<SetToCallbackFn>(common_, "ucnv_setToUCallBack_77");
-    to_unicode_ = load_function<ToUnicodeFn>(common_, "ucnv_toUnicode_77");
-    write_uchars_ = load_function<WriteUCharsFn>(common_, "ucnv_cbToUWriteUChars_77");
-    string_to_utf8_ = load_function<StringToUtf8Fn>(common_, "u_strToUTF8_77");
-    error_name_ = load_function<ErrorNameFn>(common_, "u_errorName_77");
+        load_function<DetectorGetConfidenceFn>(i18n_, "ucsdet_getConfidence_78");
+    converter_open_ = load_function<ConverterOpenFn>(common_, "ucnv_open_78");
+    converter_close_ = load_function<ConverterCloseFn>(common_, "ucnv_close_78");
+    set_to_callback_ = load_function<SetToCallbackFn>(common_, "ucnv_setToUCallBack_78");
+    to_unicode_ = load_function<ToUnicodeFn>(common_, "ucnv_toUnicode_78");
+    write_uchars_ = load_function<WriteUCharsFn>(common_, "ucnv_cbToUWriteUChars_78");
+    string_to_utf8_ = load_function<StringToUtf8Fn>(common_, "u_strToUTF8_78");
+    error_name_ = load_function<ErrorNameFn>(common_, "u_errorName_78");
 }
 
 DetectionResult IcuRuntime::detect(const std::span<const std::byte> input) const {
     return detect_candidates(input).front();
 }
 
-std::vector<DetectionResult> IcuRuntime::detect_candidates(
+std::optional<DetectionResult> IcuRuntime::detect_unicode_signature(
     const std::span<const std::byte> input) const {
     if (input.empty()) {
         throw Error("cannot detect the charset of an empty file");
@@ -142,14 +142,22 @@ std::vector<DetectionResult> IcuRuntime::detect_candidates(
         throw Error("ICU Unicode signature detection failed: " + error_text(status));
     }
     if (signature != nullptr) {
-        return {DetectionResult{
+        return DetectionResult{
             std::string(signature),
             static_cast<std::size_t>(signature_length),
             std::string(signature),
-            std::nullopt}};
+            std::nullopt};
     }
+    return std::nullopt;
+}
 
-    status = U_ZERO_ERROR;
+std::vector<DetectionResult> IcuRuntime::detect_candidates(
+    const std::span<const std::byte> input) const {
+    if (const auto signature = detect_unicode_signature(input)) {
+        return {*signature};
+    }
+    const auto length = checked_length(input);
+    UErrorCode status = U_ZERO_ERROR;
     std::unique_ptr<UCharsetDetector, DetectorCloser> detector(
         detector_open_(&status), DetectorCloser{detector_close_});
     if (U_FAILURE(status) || detector == nullptr) {
@@ -247,7 +255,7 @@ ConversionResult IcuRuntime::convert(
     }
 
     if (utf16.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max())) {
-        throw Error("converted UTF-16 text is too large for the ICU 77 C API");
+        throw Error("converted UTF-16 text is too large for the ICU 78 C API");
     }
 
     int32_t utf8_length = 0;

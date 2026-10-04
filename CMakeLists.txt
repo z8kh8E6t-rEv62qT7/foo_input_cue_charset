@@ -4,7 +4,7 @@ project(foo_input_cue_charset VERSION 0.3.5 LANGUAGES CXX)
 
 include(CTest)
 
-set(ICU_ROOT "E:/MSYS/clang64" CACHE PATH "Root of the fixed ICU 77 installation")
+set(ICU_ROOT "E:/MSYS/clang64" CACHE PATH "Root of the fixed ICU 78 installation")
 cmake_path(ABSOLUTE_PATH ICU_ROOT NORMALIZE OUTPUT_VARIABLE ICU_ROOT_ABSOLUTE)
 
 set(ICU_VERSION_HEADER "${ICU_ROOT_ABSOLUTE}/include/unicode/uvernum.h")
@@ -14,8 +14,8 @@ endif()
 
 file(STRINGS "${ICU_VERSION_HEADER}" ICU_MAJOR_LINE
     REGEX "^#define[ \t]+U_ICU_VERSION_MAJOR_NUM[ \t]+[0-9]+")
-if(NOT ICU_MAJOR_LINE MATCHES "U_ICU_VERSION_MAJOR_NUM[ \t]+77$")
-    message(FATAL_ERROR "This prototype requires ICU 77 headers; found: ${ICU_MAJOR_LINE}")
+if(NOT ICU_MAJOR_LINE MATCHES "U_ICU_VERSION_MAJOR_NUM[ \t]+78$")
+    message(FATAL_ERROR "This prototype requires ICU 78 headers; found: ${ICU_MAJOR_LINE}")
 endif()
 
 # The MSYS ICU prefix also contains MinGW C runtime headers. Giving that whole
@@ -34,6 +34,7 @@ configure_file(
 add_library(cue_charset STATIC
     src/analyzer.cpp
     src/cue_reference_path.cpp
+    src/cue_encoding.cpp
     src/diagnostics.cpp
     src/flac_duration_repair.cpp
     src/icu_runtime.cpp
@@ -94,6 +95,7 @@ set(
 set(MSVC_TOOLS_VERSION "14.44.35207" CACHE STRING "MSVC toolset version")
 
 if(BUILD_FOOBAR2000_COMPONENT)
+    enable_language(RC)
     if(NOT MSVC OR NOT WIN32)
         message(FATAL_ERROR "The foobar2000 component requires MSVC on Windows")
     endif()
@@ -166,6 +168,7 @@ if(BUILD_FOOBAR2000_COMPONENT)
         "${FOOBAR_SDK_LIB_DIR}/foobar2000_component_client.lib")
     set(FOOBAR_HELPERS_LIBRARY
         "${FOOBAR_SDK_LIB_DIR}/foobar2000_sdk_helpers.lib")
+    set(FOOBAR_UI_LIBRARY "${FOOBAR_SDK_LIB_DIR}/libPPUI.lib")
 
     add_custom_target(foobar2000_sdk_build
         COMMAND "${CMAKE_COMMAND}" -E make_directory
@@ -174,6 +177,7 @@ if(BUILD_FOOBAR2000_COMPONENT)
             "${FOOBAR_SDK_OBJ_DIR}/sdk"
             "${FOOBAR_SDK_OBJ_DIR}/component-client"
             "${FOOBAR_SDK_OBJ_DIR}/helpers"
+            "${FOOBAR_SDK_OBJ_DIR}/ui"
         COMMAND ${FOOBAR_MSBUILD_COMMAND}
             "${FOOBAR2000_SDK_ROOT_ABSOLUTE}/pfc/pfc.vcxproj"
             ${FOOBAR_MSBUILD_COMMON_ARGS}
@@ -198,11 +202,18 @@ if(BUILD_FOOBAR2000_COMPONENT)
             /p:Configuration=Release
             "/p:OutDir=${FOOBAR_SDK_LIB_DIR}/"
             "/p:IntDir=${FOOBAR_SDK_OBJ_DIR}/helpers/"
+        COMMAND ${FOOBAR_MSBUILD_COMMAND}
+            "${FOOBAR2000_SDK_ROOT_ABSOLUTE}/libPPUI/libPPUI.vcxproj"
+            ${FOOBAR_MSBUILD_COMMON_ARGS}
+            /p:Configuration=Release
+            "/p:OutDir=${FOOBAR_SDK_LIB_DIR}/"
+            "/p:IntDir=${FOOBAR_SDK_OBJ_DIR}/ui/"
         BYPRODUCTS
             "${PFC_LIBRARY}"
             "${FOOBAR_SDK_LIBRARY}"
             "${FOOBAR_COMPONENT_CLIENT_LIBRARY}"
             "${FOOBAR_HELPERS_LIBRARY}"
+            "${FOOBAR_UI_LIBRARY}"
         VERBATIM
         COMMENT "Building official foobar2000 SDK libraries with MSBuild v143")
 
@@ -214,9 +225,15 @@ if(BUILD_FOOBAR2000_COMPONENT)
         src/foobar/cue_document.cpp
         src/foobar/cue_input.cpp
         src/foobar/cue_playlist_loader.cpp
+        src/foobar/encoding_preferences.cpp
+        src/foobar/encoding_preferences.rc
         src/foobar/flac_duration_filter.cpp
         src/foobar/riff_info_repair.cpp
         src/foobar/wave_info_filter.cpp)
+    # Keep the local resource dependency explicit, including on CMake builds
+    # without the optional MSVC resource dependency scanner (cmcldeps).
+    set_source_files_properties(src/foobar/encoding_preferences.rc PROPERTIES
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/foobar/resource.h")
     add_dependencies(foo_input_cue_charset foobar2000_sdk_build)
     set_target_properties(foo_input_cue_charset PROPERTIES
         PREFIX ""
@@ -226,7 +243,7 @@ if(BUILD_FOOBAR2000_COMPONENT)
     target_compile_definitions(foo_input_cue_charset PRIVATE
         UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_compile_options(foo_input_cue_charset PRIVATE
-        /W4 /WX /permissive- /EHsc /utf-8 /d2notypeopt)
+        "$<$<COMPILE_LANGUAGE:CXX>:/W4;/WX;/permissive-;/EHsc;/utf-8;/d2notypeopt>")
     target_include_directories(foo_input_cue_charset PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
     )
@@ -240,6 +257,7 @@ if(BUILD_FOOBAR2000_COMPONENT)
         "${FOOBAR_SDK_LIBRARY}"
         "${FOOBAR_COMPONENT_CLIENT_LIBRARY}"
         "${FOOBAR_HELPERS_LIBRARY}"
+        "${FOOBAR_UI_LIBRARY}"
         "${FOOBAR2000_SDK_ROOT_ABSOLUTE}/foobar2000/shared/shared-x64.lib"
         winmm)
     target_link_options(foo_input_cue_charset PRIVATE /INCREMENTAL:NO /LTCG)

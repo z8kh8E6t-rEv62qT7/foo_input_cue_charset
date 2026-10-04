@@ -34,12 +34,15 @@ void log_warning(
 void log_failure(
     const std::string_view stage,
     const std::string_view event,
-    const std::exception& error) {
+    const std::exception& error,
+    const std::string_view context) {
+    std::string message = "failed: " + std::string(error.what());
+    if (!context.empty()) message += ", " + std::string(context);
     log_diagnostic(
         "error",
         stage,
         event,
-        (PFC_string_formatter() << "failed: " << error.what()).c_str());
+        message.c_str());
 }
 
 } // namespace cue_charset::foobar_component

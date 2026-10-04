@@ -8,6 +8,7 @@
 
 #include "component_diagnostics.hpp"
 #include "cue_document.hpp"
+#include "cue_encoding.hpp"
 
 namespace cue_charset::foobar_component {
 namespace {
@@ -19,10 +20,16 @@ public:
         const file::ptr& source,
         playlist_loader_callback::ptr callback,
         abort_callback& abort) override {
+        std::unique_ptr<CueDocument> document;
+        std::optional<std::uint32_t> current_track;
+        const char* event = "open";
         try {
-            const auto document = CueDocument::load(source, path, abort);
+            document = CueDocument::load(source, path, abort);
+            event = "cue-file-stats";
             const auto stats = document->get_stats2(stats2_all, abort);
             for (const auto& track : document->tracks()) {
+                current_track = track.number;
+                event = "entry-create";
                 abort.check();
                 const auto location = detail::make_cue_subsong_location(
                     document->cue_path().c_str(), track);
@@ -39,7 +46,9 @@ public:
                         legacy_stats,
                         true)) {
                     file_info_impl info;
+                    event = "track-info";
                     document->get_info(track.number, info, abort);
+                    event = "entry-submit";
                     callback->on_entry_info(
                         handle,
                         playlist_loader_callback::entry_from_playlist,
@@ -47,6 +56,7 @@ public:
                         info,
                         true);
                 } else {
+                    event = "entry-submit";
                     callback->on_entry(
                         handle,
                         playlist_loader_callback::entry_from_playlist,
@@ -57,7 +67,9 @@ public:
         } catch (const exception_aborted&) {
             throw;
         } catch (const std::exception& error) {
-            log_failure("loader", "open", error);
+            log_failure("loader", event, error,
+                document ? document->diagnostic_context(current_track) :
+                    "cue=" + detail::quote_diagnostic_value(path));
             throw;
         }
     }

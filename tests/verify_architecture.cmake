@@ -98,15 +98,54 @@ if(loader_extension_at EQUAL -1)
 endif()
 
 file(READ "${PROJECT_SOURCE_DIR}/src/foobar/cue_document.cpp" document_source)
+string(FIND "${document_source}" "log_failure(" duplicate_failure_at)
+if(NOT duplicate_failure_at EQUAL -1)
+    message(FATAL_ERROR "CueDocument must enrich errors without duplicating caller Console reports")
+endif()
+foreach(required_diagnostic_token IN ITEMS
+        "detail::describe_cue_selection(selected)"
+        "strict conversion and CUE parsing passed; referenced file does not exist"
+        "track.number, track.referenced_path"
+        "detail::quote_diagnostic_value(cue_path)")
+    string(FIND "${document_source}" "${required_diagnostic_token}" diagnostic_at)
+    if(diagnostic_at EQUAL -1)
+        message(FATAL_ERROR "CUE failure context is missing: ${required_diagnostic_token}")
+    endif()
+endforeach()
 foreach(required_candidate_token IN ITEMS
-        "detect_candidates(bytes)"
-        "conversion.replacement_count != 0"
+        "detail::select_cue_text(analyzer, bytes, priorities"
+        "configured_encoding_priority()"
         "filesystem::g_exists"
         "charset-candidate-fallback")
     string(FIND "${document_source}" "${required_candidate_token}" candidate_token_at)
     if(candidate_token_at EQUAL -1)
         message(FATAL_ERROR
             "CUE charset candidate validation is missing: ${required_candidate_token}")
+    endif()
+endforeach()
+file(READ "${PROJECT_SOURCE_DIR}/src/cue_encoding.cpp" encoding_source)
+foreach(required_encoding_token IN ITEMS
+        "analyzer.detect_unicode_signature(bytes)"
+        "conversion.replacement_count != 0"
+        "analyzer.detect_candidates(bytes)"
+        "validator(conversion.utf8, encoding)"
+        "first_source_byte_offset="
+        "first ICU candidate retained (not validated)")
+    string(FIND "${encoding_source}" "${required_encoding_token}" token_at)
+    if(token_at EQUAL -1)
+        message(FATAL_ERROR "Encoding selection guard is missing: ${required_encoding_token}")
+    endif()
+endforeach()
+file(READ "${PROJECT_SOURCE_DIR}/src/foobar/encoding_preferences.cpp" preferences_source)
+foreach(required_preferences_token IN ITEMS
+        "preferences_page_factory_t<EncodingPreferencesPage>"
+        "return guid_tools;"
+        "cfg_string g_encoding_priority"
+        "validate_encoding_priority"
+        "default_encoding_priority")
+    string(FIND "${preferences_source}" "${required_preferences_token}" token_at)
+    if(token_at EQUAL -1)
+        message(FATAL_ERROR "Dedicated preferences requirement is missing: ${required_preferences_token}")
     endif()
 endforeach()
 string(FIND "${document_source}" "apply_riff_info_utf8_repair" riff_repair_at)

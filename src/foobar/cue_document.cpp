@@ -14,6 +14,8 @@
 
 #include "component_diagnostics.hpp"
 #include "charset_analyzer.hpp"
+#include "cue_encoding.hpp"
+#include "encoding_preferences.hpp"
 #include "cue_reference_path.hpp"
 #include "cue_charset/cue_charset.hpp"
 #include "riff_info_repair.hpp"
@@ -23,16 +25,18 @@ namespace cue_charset::foobar_component {
 namespace {
 
 template <typename Function>
-decltype(auto) diagnostic_stage(const char* stage, Function&& function) {
+decltype(auto) diagnostic_stage(
+    const char* stage, const std::string& context, Function&& function) {
     try {
         return std::forward<Function>(function)();
     } catch (const exception_aborted&) {
         throw;
     } catch (const std::exception& error) {
-        log_failure("load", stage, error);
         const pfc::string8 diagnostic =
             PFC_string_formatter()
-            << "CUE Charset Input [" << stage << "]: " << error.what();
+            << "CUE Charset Input [" << stage << "]: reason="
+            << detail::quote_diagnostic_value(error.what()).c_str()
+            << ", " << context.c_str();
         pfc::throw_exception_with_message<exception_cue_charset_input>(diagnostic);
     }
 }
@@ -72,18 +76,6 @@ std::vector<std::byte> read_cue_file(file::ptr source, abort_callback& abort) {
         fail("CUE file is empty");
     }
     return bytes;
-}
-
-std::string convert_cue(
-    const Analyzer& analyzer,
-    const std::span<const std::byte> bytes,
-    const DetectionResult& detection) {
-    auto converted = analyzer.convert(bytes, detection.encoding).utf8;
-    constexpr std::string_view utf8_bom{"\xEF\xBB\xBF", 3};
-    if (converted.starts_with(utf8_bom)) {
-        converted.erase(0, utf8_bom.size());
-    }
-    return converted;
 }
 
 bool resolve_cue_reference(
@@ -148,67 +140,23 @@ std::vector<detail::TrackSegment> parse_tracks(
     }
 }
 
-bool referenced_files_exist(
+std::optional<detail::CueCandidateIssue> validate_referenced_files(
     const std::vector<detail::TrackSegment>& tracks,
+    const std::string_view encoding,
     abort_callback& abort) {
     for (const auto& track : tracks) {
         abort.check();
-        if (!filesystem::g_exists(track.referenced_path.c_str(), abort)) {
-            return false;
+        const std::string context = "encoding=" + detail::quote_diagnostic_value(encoding) +
+            ", track=" + std::to_string(track.number) +
+            ", referenced=" + detail::quote_diagnostic_value(track.referenced_path);
+        if (!diagnostic_stage("referenced-file-check", context, [&] {
+                return filesystem::g_exists(track.referenced_path.c_str(), abort);
+            })) {
+            return detail::CueCandidateIssue{
+                detail::CueCandidateStage::referenced_file_check,
+                "strict conversion and CUE parsing passed; referenced file does not exist",
+                track.number, track.referenced_path};
         }
-    }
-    return true;
-}
-
-struct SelectedCueCandidate {
-    std::string text;
-    std::vector<detail::TrackSegment> tracks;
-};
-
-std::optional<SelectedCueCandidate> select_usable_statistical_candidate(
-    const Analyzer& analyzer,
-    const std::span<const std::byte> bytes,
-    const std::vector<DetectionResult>& candidates,
-    const char* cue_path,
-    abort_callback& abort) {
-    if (candidates.empty() || candidates.front().unicode_signature.has_value()) {
-        return std::nullopt;
-    }
-
-    for (std::size_t index = 0; index < candidates.size(); ++index) {
-        abort.check();
-
-        ConversionResult conversion;
-        try {
-            conversion = analyzer.convert(bytes, candidates[index].encoding);
-        } catch (const Error&) {
-            continue;
-        }
-        if (conversion.replacement_count != 0) {
-            continue;
-        }
-
-        std::vector<detail::TrackSegment> tracks;
-        try {
-            tracks = parse_tracks(conversion.utf8, cue_path);
-        } catch (const exception_cue_charset_input&) {
-            continue;
-        }
-        if (!referenced_files_exist(tracks, abort)) {
-            continue;
-        }
-
-        if (index != 0) {
-            const pfc::string8 details =
-                PFC_string_formatter()
-                << "selected " << candidates[index].encoding.c_str()
-                << " (ICU confidence " << *candidates[index].confidence
-                << ") after " << candidates.front().encoding.c_str()
-                << " failed strict conversion or referenced-file validation";
-            log_warning("load", "charset-candidate-fallback", details.c_str());
-        }
-        return SelectedCueCandidate{
-            std::move(conversion.utf8), std::move(tracks)};
     }
     return std::nullopt;
 }
@@ -229,7 +177,7 @@ std::unique_ptr<CueDocument> CueDocument::load(
     const char* cue_path,
     abort_callback& abort) {
     auto result = std::unique_ptr<CueDocument>(new CueDocument());
-    diagnostic_stage("file-open", [&] {
+    diagnostic_stage("file-open", "cue=" + detail::quote_diagnostic_value(cue_path), [&] {
         result->cue_file_ = std::move(file_hint);
         if (result->cue_file_.is_empty()) {
             filesystem::g_open_read(result->cue_file_, cue_path, abort);
@@ -239,27 +187,44 @@ std::unique_ptr<CueDocument> CueDocument::load(
         filesystem::g_get_canonical_path(cue_path, result->cue_path_);
     });
     const auto bytes = diagnostic_stage(
-        "file-read", [&] { return read_cue_file(result->cue_file_, abort); });
+        "file-read", result->diagnostic_context(), [&] { return read_cue_file(result->cue_file_, abort); });
     const auto& analyzer = diagnostic_stage(
-        "icu-load", []() -> const Analyzer& { return shared_charset_analyzer(); });
-    const auto candidates = diagnostic_stage(
-        "charset-detection", [&] { return analyzer.detect_candidates(bytes); });
-    if (auto selected = select_usable_statistical_candidate(
-            analyzer,
-            bytes,
-            candidates,
-            result->cue_path_.c_str(),
-            abort)) {
-        result->cue_text_ = std::move(selected->text);
-        result->tracks_ = std::move(selected->tracks);
-        return result;
+        "icu-load", result->diagnostic_context(), []() -> const Analyzer& { return shared_charset_analyzer(); });
+    const auto priorities = diagnostic_stage(
+        "encoding-preferences", result->diagnostic_context(), [] { return configured_encoding_priority(); });
+    auto selected = diagnostic_stage("charset-selection", result->diagnostic_context(), [&] {
+        return detail::select_cue_text(analyzer, bytes, priorities,
+            [&](const std::string& text, const std::string_view encoding)
+                -> std::optional<detail::CueCandidateIssue> {
+                abort.check();
+                std::vector<detail::TrackSegment> tracks;
+                try {
+                    tracks = parse_tracks(text, result->cue_path_.c_str());
+                } catch (const exception_cue_charset_input& error) {
+                    return detail::CueCandidateIssue{
+                        detail::CueCandidateStage::cue_parse_path_resolution,
+                        error.what(), {}, {}};
+                }
+                if (auto issue = validate_referenced_files(tracks, encoding, abort)) return issue;
+                result->tracks_ = std::move(tracks);
+                return std::nullopt;
+            });
+    });
+    result->selection_diagnostic_ = detail::describe_cue_selection(selected);
+    result->cue_text_ = std::move(selected.utf8);
+    if (!selected.validated) {
+        result->tracks_ = diagnostic_stage("cue-parse-path-resolution", result->diagnostic_context(), [&] {
+            return parse_tracks(result->cue_text_, result->cue_path_.c_str());
+        });
     }
-
-    result->cue_text_ = diagnostic_stage(
-        "utf8-conversion", [&] { return convert_cue(analyzer, bytes, candidates.front()); });
-    result->tracks_ = diagnostic_stage(
-        "cue-parse-path-resolution",
-        [&] { return parse_tracks(result->cue_text_, result->cue_path_.c_str()); });
+    if (selected.source == detail::CueEncodingSource::automatic_fallback) {
+        log_warning("load", "charset-candidate-fallback",
+            (PFC_string_formatter() << "selected " << selected.detection.encoding.c_str()
+             << " (ICU confidence " << *selected.detection.confidence
+             << ") after " << selected.first_automatic_encoding.c_str()
+             << " failed conversion, CUE parsing, path resolution or referenced-file validation"
+             << ", cue=" << detail::quote_diagnostic_value(result->cue_path_.c_str()).c_str()).c_str());
+    }
     return result;
 }
 
@@ -277,6 +242,19 @@ const detail::TrackSegment& CueDocument::track(const std::uint32_t number) const
         throw exception_io_bad_subsong_index();
     }
     return *found;
+}
+
+std::string CueDocument::diagnostic_context(
+    const std::optional<std::uint32_t> track_number) const {
+    std::string result = "cue=" + detail::quote_diagnostic_value(cue_path_.c_str());
+    if (track_number) {
+        result += ", track=" + std::to_string(*track_number);
+        if (const auto* selected = detail::find_track(tracks_, *track_number)) {
+            result += ", referenced=" + detail::quote_diagnostic_value(selected->referenced_path);
+        }
+    }
+    if (!selection_diagnostic_.empty()) result += ", " + selection_diagnostic_;
+    return result;
 }
 
 void CueDocument::get_info(

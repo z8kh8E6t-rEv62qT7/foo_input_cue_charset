@@ -1,5 +1,6 @@
 #include "cue_charset/cue_charset.hpp"
 #include "cue_reference_path.hpp"
+#include "cue_encoding_tests.hpp"
 #include "flac_duration_repair_tests.hpp"
 #include "track_layout.hpp"
 #include "riff_info_tests.hpp"
@@ -349,6 +350,7 @@ int main(const int argc, char* argv[]) {
         test_corrupt_gb18030(analyzer, fixtures);
         test_unicode_signature(analyzer);
         test_statistical_candidates(analyzer, fixtures);
+        cue_charset::tests::run_cue_encoding_tests(analyzer);
         cue_charset::tests::run_flac_duration_repair_tests();
         cue_charset::tests::run_riff_info_tests(analyzer);
         test_track_layout();
@@ -360,7 +362,7 @@ int main(const int argc, char* argv[]) {
             "unable to load ICU DLL");
         require_error(
             [&] { const cue_charset::Analyzer missing_symbols(fake_icu_root); },
-            "required ICU 77 symbol");
+            "required ICU 78 symbol");
 
         const std::array<std::byte, 1> value{std::byte{'x'}};
         require_error([&] { (void)analyzer.convert(value, ""); }, "empty charset name");

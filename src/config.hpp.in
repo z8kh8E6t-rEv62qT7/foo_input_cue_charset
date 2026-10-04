@@ -1,5 +1,4 @@
 #pragma once
 
 #define CUE_CHARSET_DEFAULT_ICU_ROOT LR"icu(@ICU_ROOT_ABSOLUTE@)icu"
-#define CUE_CHARSET_ICU_MAJOR 77
-
+#define CUE_CHARSET_ICU_MAJOR 78

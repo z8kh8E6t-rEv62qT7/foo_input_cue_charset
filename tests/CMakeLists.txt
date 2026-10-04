@@ -2,6 +2,7 @@ add_library(fake_icu SHARED fake_icu.cpp)
 set_target_properties(fake_icu PROPERTIES PREFIX "")
 
 add_executable(cue_charset_tests
+    cue_encoding_tests.cpp
     flac_duration_repair_tests.cpp
     riff_info_tests.cpp
     test_main.cpp)
@@ -19,9 +20,9 @@ set(FAKE_ICU_ROOT "$<TARGET_FILE_DIR:cue_charset_tests>/fake-icu")
 add_custom_command(TARGET cue_charset_tests POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${FAKE_ICU_ROOT}/bin"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:fake_icu>" "${FAKE_ICU_ROOT}/bin/libc++.dll"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:fake_icu>" "${FAKE_ICU_ROOT}/bin/libicudt77.dll"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:fake_icu>" "${FAKE_ICU_ROOT}/bin/libicuuc77.dll"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:fake_icu>" "${FAKE_ICU_ROOT}/bin/libicuin77.dll"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:fake_icu>" "${FAKE_ICU_ROOT}/bin/libicudt78.dll"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:fake_icu>" "${FAKE_ICU_ROOT}/bin/libicuuc78.dll"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:fake_icu>" "${FAKE_ICU_ROOT}/bin/libicuin78.dll"
     VERBATIM
 )
 

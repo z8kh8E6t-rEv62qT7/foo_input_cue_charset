@@ -1,0 +1,22 @@
+#include <windows.h>
+#include "resource.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDD_ENCODING_PREFERENCES DIALOGEX 0, 0, 320, 258
+STYLE DS_SETFONT | DS_CONTROL | WS_CHILD
+EXSTYLE WS_EX_CONTROLPARENT
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "Encoding priority (highest first)", -1, 8, 8, 304, 12
+    LTEXT "Unicode BOM always wins. Without a BOM, try this list before ICU automatic detection.", -1, 8, 25, 304, 26
+    LISTBOX IDC_ENCODING_LIST, 8, 55, 230, 96, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP | WS_BORDER
+    PUSHBUTTON "Move up", IDC_ENCODING_UP, 246, 55, 66, 16
+    PUSHBUTTON "Move down", IDC_ENCODING_DOWN, 246, 77, 66, 16
+    PUSHBUTTON "Remove", IDC_ENCODING_REMOVE, 246, 99, 66, 16
+    LTEXT "Encoding name (e.g. GB18030, Big5, Shift_JIS, UTF-8):", -1, 8, 159, 304, 12
+    EDITTEXT IDC_ENCODING_NAME, 8, 175, 230, 16, ES_AUTOHSCROLL | WS_TABSTOP
+    PUSHBUTTON "Add", IDC_ENCODING_ADD, 246, 175, 66, 16
+    LTEXT "", IDC_ENCODING_STATUS, 8, 196, 304, 24
+    LTEXT "Empty list = automatic. Applies to all CUE files. After Apply, use Reload info from file(s); restart playback for the current track.", -1, 8, 224, 304, 28
+END

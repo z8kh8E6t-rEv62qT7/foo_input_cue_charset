@@ -98,6 +98,11 @@ DetectionResult Analyzer::detect(const std::span<const std::byte> input) const {
     return impl_->runtime.detect(input);
 }
 
+std::optional<DetectionResult> Analyzer::detect_unicode_signature(
+    const std::span<const std::byte> input) const {
+    return impl_->runtime.detect_unicode_signature(input);
+}
+
 std::vector<DetectionResult> Analyzer::detect_candidates(
     const std::span<const std::byte> input) const {
     return impl_->runtime.detect_candidates(input);

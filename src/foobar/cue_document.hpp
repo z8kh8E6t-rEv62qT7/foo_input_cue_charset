@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -29,6 +30,8 @@ public:
     [[nodiscard]] const pfc::string8& cue_path() const noexcept;
     [[nodiscard]] const std::vector<detail::TrackSegment>& tracks() const noexcept;
     [[nodiscard]] const detail::TrackSegment& track(std::uint32_t number) const;
+    [[nodiscard]] std::string diagnostic_context(
+        std::optional<std::uint32_t> track_number = std::nullopt) const;
 
     void get_info(
         std::uint32_t track_number,
@@ -55,6 +58,7 @@ private:
     file::ptr cue_file_;
     pfc::string8 cue_path_;
     std::string cue_text_;
+    std::string selection_diagnostic_;
     std::vector<detail::TrackSegment> tracks_;
     mutable std::mutex riff_info_mutex_;
     mutable std::unordered_map<std::string, detail::RiffInfoUtf8Result>

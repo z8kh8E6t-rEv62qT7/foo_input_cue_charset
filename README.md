@@ -9,7 +9,8 @@
 ## 行为
 
 - 单个 CUE 文件最多读取 128 MiB。
-- 首先使用 ICU 77 检查 Unicode signature。不存在 signature 时，组件按 ICU 给出的统计候选顺序逐一验证，采用第一个同时满足以下条件的候选：转换过程没有替换字符、文本能解析为 CUE、全部引用音频文件均存在。如果所有候选都未通过，则保留 ICU 原始首选候选，使正常的转换错误或 CUE 错误仍能明确呈现。
+- 首先使用 ICU 78 检查 Unicode signature（BOM），存在时直接采用对应 Unicode 编码，不受优先列表影响。无 BOM 时先按用户设置的全局编码优先列表尝试（初始为 `GB18030`）；每个候选必须同时满足：转换过程没有替换字符、文本能解析为 CUE、全部引用音频文件均存在。
+- 优先列表全部失败或为空时，按 ICU 的统计候选顺序执行相同验证。如果所有统计候选也未通过，则保留 ICU 原始首选候选，使正常的转换错误或 CUE 错误仍能明确呈现。
 - 只读诊断 CLI 仍只报告 ICU 的第一候选，因为它没有 foobar2000 文件系统上下文，无法验证引用文件。
 - 将完整 CUE 文件转换为 UTF-8；使用回退首选候选时，非法源序列会记录为 U+FFFD，但不会因此改选其他编码。
 - 使用 foobar2000 SDK 官方 `cue_parser` 解析 UTF-8 文本。每条轨道生成一个规范 CUE 路径条目，并以真实轨号作为 subsong；引用音频区间由 `input_helper_cue` 解码。
@@ -40,6 +41,8 @@
 - 所有标签写入操作均抛出 `exception_tagging_unsupported`。
 - ICU、检测、转换、路径和 CUE 解析失败会直接报告，不会静默回退到内置 CUE handler。
 - foobar2000 Console 仅输出 warning/error。成功的加载、检测、转换、轨道枚举、解码、seek、封面查询和元数据修复均不输出追踪；用户主动取消操作同样保持静默。
+- 加载、读取轨道信息或解码失败时，Console 会附带 CUE 路径，以及可用的编码、轨号和引用音频完整路径。所有编码候选均未通过验证时，失败日志还会列出各候选的拒绝阶段：转换失败（替换数和从零开始的源字节偏移）、CUE 解析/路径解析失败，或引用文件不存在。严格转换及解析通过但文件不存在，不代表该候选的编码错误，也不代表已经证明编码正确。
+- 所有候选被拒绝后，仍保留原有“采用 ICU 第一候选交给后续处理”的行为；日志会明确标记 `validated=false`，不将其描述为验证成功。诊断只补充信息，不猜测文件名、不更改编码选择策略、不修改文件。诊断上下文中的路径及候选拒绝原因采用带引号的转义表示，防止换行被误读为另一条日志。
 
 自定义 playlist loader 与内置 loader 都会声明 `.cue`，但 foobar2000 未提供 loader 优先级设置。目标 foobar2000 2.26 环境已通过 Console 诊断确认会调用本组件的 loader。Decoder Priority 仍负责决定由哪个 `.cue` input decoder 打开生成的原生 CUE/subsong 条目。
 
@@ -56,7 +59,11 @@
 
 此前出现过一次没有附加信息的 `Unrecoverable playback error`，原因是 foobar2000 未选择可用输出设备，并非 playlist loader 或 decoder 预检失败。组件不需要 redirect handler、虚拟文件系统、代理文件或隐式 hook。
 
-组件没有自定义设置页，也不会修改 CUE、引用音频、标签、播放列表或媒体库设置。两个修复均采用标准 foobar2000 input-info filter，因此新安装后默认不启用；需要用户在 **Input info filters** 页面分别手动启用 `CUE Charset RIFF INFO Filter` 或 `CUE Charset FLAC Duration Repair`。
+组件在 **Preferences → Tools → CUE Charset Input** 提供独立编码优先级页面。输入 ICU 编码名后点击 **Add**，使用 **Move up / Move down / Remove** 调整顺序，点击 **Apply** 保存。支持例如 `GB18030`、`Big5`、`Shift_JIS`、`UTF-8`；输入会检查 ICU 是否支持该编码，并拒绝同名重复项。最多 32 项，每个编码名最多 64 个字符。**Reset page** 恢复仅含 GB18030 的默认列表，需点击 Apply 才会保存；清空列表则恢复纯自动识别。取消设置不会保存未应用的改动。
+
+优先列表作用于所有外部 CUE，持久化到 foobar2000 配置并在重启后保留。导入、元数据读取、解码和封面均通过同一个 CUE 加载入口使用此设置。更改后请对现有条目执行 **Reload info from file(s)**；正在播放的 CUE 需要停止后重新播放。CLI 仍只报告 ICU 的第一候选，不读取宿主设置。
+
+优先级是一项用户指定的偏好，并不能判断所有内容的真实编码：有些 GB18030 和 Big5 字节均可合法转换，且引用路径全为 ASCII。此时列表中第一个通过验证的编码获胜；若其他专辑因此乱码，请调整优先级或清空列表。组件不会修改 CUE、引用音频、标签、播放列表或媒体库设置。两个信息修复过滤器在新安装后默认不启用；需在 **Input info filters** 页面分别手动启用 `CUE Charset RIFF INFO Filter` 或 `CUE Charset FLAC Duration Repair`。
 
 启用 FLAC 过滤器后，foobar2000 已缓存的旧时长不会自动刷新。请对相关条目执行 **Reload info from file(s)**。修复只存在于 foobar2000 的信息缓存：FLAC 内部错误的 `total_samples` 和 MD5 不会改变，`flac -t` 仍会报告原始 MD5 mismatch。
 
@@ -68,16 +75,16 @@
 - Windows SDK 10.0.26100.0
 - foobar2000 SDK：`D:/Foobar2000/sdk`
 - WTL 10.01：`deps/WTL10_01_Release`
-- ICU 77：`ICU_ROOT`，默认 `E:/MSYS/clang64`
+- ICU 78：`ICU_ROOT`，默认 `E:/MSYS/clang64`
 
 WTL 仅作为 header-only 构建依赖使用，采用 Microsoft Public License；其头文件不会复制进组件包。
 
 字符集核心使用 ICU headers 编译，但不会链接 MinGW `.dll.a` import library。运行时从 `ICU_ROOT/bin` 通过绝对路径加载以下文件：
 
 - `libc++.dll`
-- `libicudt77.dll`
-- `libicuuc77.dll`
-- `libicuin77.dll`
+- `libicudt78.dll`
+- `libicuuc78.dll`
+- `libicuin78.dll`
 
 ICU 是固定的本机运行时依赖；这些 DLL 不会被复制、安装或打包。
 
@@ -91,7 +98,9 @@ cmake --build D:/Foobar2000/foo_input_cue_charset/build
 ctest --test-dir D:/Foobar2000/foo_input_cue_charset/build --output-on-failure
 ```
 
-项目不提供 CMake Preset 或 wrapper build script。构建过程会使用 v143 调用官方 `pfc`、SDK、component-client 和 helpers MSBuild 工程，然后生成：
+项目不提供 CMake Preset 或 wrapper build script。构建过程会使用 v143 调用官方 `pfc`、SDK、component-client、helpers 和 `libPPUI` MSBuild 工程。`libPPUI` 来自已有 SDK，用于原生设置页及深色模式，静态链接而不增加运行时 DLL。然后生成：
+
+若使用缺少 `cmcldeps.exe` 的 MSYS CMake，configure 命令还需加入 `-DCMAKE_NINJA_CMCLDEPS_RC=OFF`，避免生成无效的资源编译命令。本项目已显式声明页面资源对 `resource.h` 的依赖。
 
 ```text
 build/dist/foo_input_cue_charset-0.3.5-x64.fb2k-component
@@ -128,3 +137,5 @@ first_replacement_offset=N/A
 核心测试还会合成以下 RIFF/WAVE INFO 情形：结构正常、`data` 截断、受限的文件头/文件尾恢复、块结构损坏；同时覆盖具有代表性的 RF64、RIFX、WAVE64、AIFF、FLAC、APE/APEv2、WavPack、ID3、MP4、TAK 和 TTA signature。这些回归测试确保 UTF-8 overlay 始终只作用于经典小端 RIFF/WAVE，而不会演变成通用标签 decoder。
 
 FLAC 时长核心测试覆盖 600 秒和 96 kbps 的严格边界、无效数值、无需扫描和需要扫描的策略、1 秒修正阈值、采样数溢出、采样率变化、空输出，以及缓存命中和文件统计变化失效。已知损坏样本的回归数据为 6,206,976 samples / 44,100 Hz，即约 140.748 秒和 543.8 kbps。
+
+编码优先级测试使用虚构 ASCII 文件名与 GB18030 日文标题构造歧义 CUE，覆盖有序选择、候选校验失败、非法字节、自动回退、BOM 优先、取消传播，以及配置序列化、空列表、重复项和非法编码名。

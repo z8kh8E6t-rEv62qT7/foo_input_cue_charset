@@ -54,29 +54,44 @@ public:
         const t_uint32 subsong,
         file_info& info,
         abort_callback& abort) const {
-        document_->get_info(subsong, info, abort);
+        try {
+            document_->get_info(subsong, info, abort);
+        } catch (const exception_aborted&) {
+            throw;
+        } catch (const std::exception& error) {
+            log_failure("decoder", "track-info", error, document_->diagnostic_context(subsong));
+            throw;
+        }
     }
 
     t_filestats2 get_stats2(
         const std::uint32_t flags,
         abort_callback& abort) const {
-        return document_->get_stats2(flags, abort);
+        try {
+            return document_->get_stats2(flags, abort);
+        } catch (const exception_aborted&) {
+            throw;
+        } catch (const std::exception& error) {
+            log_failure("decoder", "cue-file-stats", error, document_->diagnostic_context());
+            throw;
+        }
     }
 
     void decode_initialize(
         const t_uint32 subsong,
         const unsigned flags,
         abort_callback& abort) {
-        const auto& selected = document_->track(subsong);
-        if (decoder_.is_open()) {
-            decoder_.close();
-        }
-        unsigned effective_flags = flags & ~input_flag_allow_inaccurate_seeking;
-        if (selected.start_seconds > 0) {
-            effective_flags &= ~input_flag_no_seeking;
-        }
-        const double length = selected.known_length_seconds.value_or(0.0);
+        current_subsong_ = subsong;
         try {
+            const auto& selected = document_->track(subsong);
+            if (decoder_.is_open()) {
+                decoder_.close();
+            }
+            unsigned effective_flags = flags & ~input_flag_allow_inaccurate_seeking;
+            if (selected.start_seconds > 0) {
+                effective_flags &= ~input_flag_no_seeking;
+            }
+            const double length = selected.known_length_seconds.value_or(0.0);
             decoder_.open(
                 nullptr,
                 make_playable_location(selected.referenced_path.c_str(), 0),
@@ -85,14 +100,14 @@ public:
                 selected.start_seconds,
                 length,
                 selected.binary);
+            if (logger_.is_valid()) {
+                decoder_.set_logger(logger_);
+            }
         } catch (const exception_aborted&) {
             throw;
         } catch (const std::exception& error) {
-            log_failure("decode", "initialize", error);
+            log_failure("decode", "initialize", error, document_->diagnostic_context(current_subsong_));
             throw;
-        }
-        if (logger_.is_valid()) {
-            decoder_.set_logger(logger_);
         }
     }
 
@@ -102,7 +117,7 @@ public:
         } catch (const exception_aborted&) {
             throw;
         } catch (const std::exception& error) {
-            log_failure("decode", "run", error);
+            log_failure("decode", "run", error, document_->diagnostic_context(current_subsong_));
             throw;
         }
     }
@@ -116,7 +131,7 @@ public:
         } catch (const exception_aborted&) {
             throw;
         } catch (const std::exception& error) {
-            log_failure("decode", "run-raw", error);
+            log_failure("decode", "run-raw", error, document_->diagnostic_context(current_subsong_));
             throw;
         }
     }
@@ -127,7 +142,7 @@ public:
         } catch (const exception_aborted&) {
             throw;
         } catch (const std::exception& error) {
-            log_failure("decode", "seek", error);
+            log_failure("decode", "seek", error, document_->diagnostic_context(current_subsong_));
             throw;
         }
     }
@@ -139,8 +154,10 @@ public:
     bool decode_get_dynamic_info(file_info& info, double& timestamp_delta) {
         try {
             return decoder_.get_dynamic_info(info, timestamp_delta);
+        } catch (const exception_aborted&) {
+            throw;
         } catch (const std::exception& error) {
-            log_failure("decode", "dynamic-info", error);
+            log_failure("decode", "dynamic-info", error, document_->diagnostic_context(current_subsong_));
             throw;
         }
     }
@@ -148,8 +165,10 @@ public:
     bool decode_get_dynamic_info_track(file_info& info, double& timestamp_delta) {
         try {
             return decoder_.get_dynamic_info_track(info, timestamp_delta);
+        } catch (const exception_aborted&) {
+            throw;
         } catch (const std::exception& error) {
-            log_failure("decode", "dynamic-info-track", error);
+            log_failure("decode", "dynamic-info-track", error, document_->diagnostic_context(current_subsong_));
             throw;
         }
     }
@@ -160,7 +179,7 @@ public:
         } catch (const exception_aborted&) {
             throw;
         } catch (const std::exception& error) {
-            log_failure("decode", "idle", error);
+            log_failure("decode", "idle", error, document_->diagnostic_context(current_subsong_));
             throw;
         }
     }
@@ -205,6 +224,7 @@ private:
     std::unique_ptr<CueDocument> document_;
     input_helper_cue decoder_;
     event_logger::ptr logger_;
+    std::optional<std::uint32_t> current_subsong_;
 };
 
 static input_factory_t<CueCharsetInput> g_cue_charset_factory;

@@ -51,7 +51,7 @@ FARPROC Win32Module::find(const std::string_view symbol) const {
     const auto address = ::GetProcAddress(handle_, terminated.c_str());
     if (address == nullptr) {
         throw Error(
-            "required ICU 77 symbol '" + terminated + "' is missing from '" +
+            "required ICU 78 symbol '" + terminated + "' is missing from '" +
             path_as_utf8(path_) + "'");
     }
     return address;
